@@ -306,9 +306,7 @@ class ProfessionalAnalysis {
     if (yukselisTrendi) { puan += 15; pozitif.push('HH & HL (Yükseliş Trendi)'); }
     if (dususTrendi)    { puan -= 15; negatif.push('LH & LL (Düşüş Trendi)'); }
 
-    // ── ZORUNLU FİLTRE CEZASI ────────────────────────────────
-    if (!rsiUygun)   { puan -= 50; negatif.push(`RSI filtre dışı (${rsi.toFixed(1)})`); }
-if (!hacimUygun) { puan -= 30; negatif.push(`Hacim filtre dışı (${volOran}x)`); }
+    
     // ── SİNYAL KARARI ────────────────────────────────────────
     const sinyal = puan >= 50 ? 'ALIM' : puan <= -20 ? 'SATIS' : 'BEKLE';
     const risk   = puan >= 80 ? 'DUSUK' : puan >= 60 ? 'ORTA' : 'YUKSEK';
