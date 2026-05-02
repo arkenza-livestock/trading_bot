@@ -22,9 +22,9 @@ class ProfessionalAnalysis {
     const stochBull = stochK > stochD && stochK < 20;
     const stochBear = stochK < stochD && stochK > 80;
 
-    const williamsR     = this.hesaplaWilliamsR(highs, lows, closes, 14);
+    const williamsR      = this.hesaplaWilliamsR(highs, lows, closes, 14);
     const williamsAsirim = williamsR < -80;
-    const williamsAlim  = williamsR < -80 && williamsR > this.hesaplaWilliamsR(
+    const williamsAlim   = williamsR < -80 && williamsR > this.hesaplaWilliamsR(
       highs.slice(0,-1), lows.slice(0,-1), closes.slice(0,-1), 14
     );
 
@@ -227,8 +227,8 @@ class ProfessionalAnalysis {
     if (yukselisTrendi) { puan += 15; pozitif.push('HH & HL (Yükseliş Trendi)'); }
     if (dususTrendi)    { puan -= 15; negatif.push('LH & LL (Düşüş Trendi)'); }
 
-    const sinyal = puan >= 50 ? 'ALIM' : puan <= -20 ? 'SATIS' : 'BEKLE';
-    const risk   = puan >= 80 ? 'DUSUK' : puan >= 60 ? 'ORTA' : 'YUKSEK';
+    const sinyal  = puan >= 50 ? 'ALIM' : puan <= -20 ? 'SATIS' : 'BEKLE';
+    const risk    = puan >= 80 ? 'DUSUK' : puan >= 60 ? 'ORTA' : 'YUKSEK';
     const hedef   = parseFloat((fiyat + atr14 * 3).toFixed(8));
     const stopLos = parseFloat((fiyat - atr14 * 1.5).toFixed(8));
     const rrOrani = parseFloat(((hedef - fiyat) / (fiyat - stopLos)).toFixed(2));
@@ -239,7 +239,7 @@ class ProfessionalAnalysis {
       price:     parseFloat(fiyat.toFixed(8)),
       puan, risk, sinyal,
       score:     puan,
-      signal:    sinyal === 'ALIM' ? 'ALIM' : sinyal === 'SATIS' ? 'SATIS' : 'BEKLE',
+      signal:    sinyal,
       rsi:       parseFloat(rsi.toFixed(2)),
       rsiYon, rsiDivBull, rsiDivBear,
       stochK:    parseFloat(stochK.toFixed(2)),
@@ -310,31 +310,45 @@ class ProfessionalAnalysis {
     const result = this.analyze(candles4H, ticker);
     if (!result) return { setup:'BEKLE' };
     const minScore = parseInt(settings?.min_score || 40);
-    if      (result.puan >= 70) return { ...result, setup:'LONG_ADAY', longSinyal:'GUCLU',  price:result.fiyat };
-    else if (result.puan >= 55) return { ...result, setup:'LONG_ADAY', longSinyal:'NORMAL', price:result.fiyat };
+    if      (result.puan >= 70) return { ...result, setup:'LONG_ADAY',  longSinyal:'GUCLU',  price:result.fiyat };
+    else if (result.puan >= 55) return { ...result, setup:'LONG_ADAY',  longSinyal:'NORMAL', price:result.fiyat };
     else if (result.puan >= minScore) return { ...result, setup:'LONG_ADAY', longSinyal:'ZAYIF', price:result.fiyat };
     else if (result.puan <= -40) return { ...result, setup:'SHORT_ADAY', shortSinyal:'GUCLU',  price:result.fiyat };
     else if (result.puan <= -25) return { ...result, setup:'SHORT_ADAY', shortSinyal:'NORMAL', price:result.fiyat };
     return { ...result, setup:'BEKLE', price:result.fiyat };
   }
 
+  analyze1HTiming(candles1H, setup4H, settings) {
+    if (!candles1H || candles1H.length < 50) return { signal:'BEKLE' };
+    const result = this.analyze1H(candles1H);
+    if (result.trend === 'YUKARI' || result.trend === 'HAFIF_YUKARI') {
+      return { signal:'ALIM', trend:result.trend, crossover:result.crossover };
+    }
+    if (result.trend === 'ASAGI' || result.trend === 'HAFIF_ASAGI') {
+      return { signal:'SATIS', trend:result.trend };
+    }
+    return { signal:'BEKLE', trend:result.trend };
+  }
+
   analyze1H(candles) {
     if (!candles || candles.length < 50) return { trend:'BELIRSIZ', guclu:false };
     const closes = candles.map(c => parseFloat(c[4]));
+    const highs  = candles.map(c => parseFloat(c[2]));
+    const lows   = candles.map(c => parseFloat(c[3]));
     const ema21  = this.hesaplaEMA(closes, 21);
     const ema50  = this.hesaplaEMA(closes, 50);
     const fiyat  = closes[closes.length-1];
     const rsi    = this.hesaplaRSI(closes, 14);
+    const macd   = this.hesaplaMACD(closes);
     let trend = 'BELIRSIZ';
     if      (fiyat > ema21 && ema21 > ema50) trend = 'YUKARI';
     else if (fiyat > ema21)                  trend = 'HAFIF_YUKARI';
     else if (fiyat < ema21 && ema21 < ema50) trend = 'ASAGI';
     else if (fiyat < ema21)                  trend = 'HAFIF_ASAGI';
     else                                     trend = 'YATAY';
-    const macd = this.hesaplaMACD(closes);
     return {
       trend,
-      guclu: Math.abs(fiyat-ema21)/fiyat > 0.02,
+      guclu:      Math.abs(fiyat-ema21)/fiyat > 0.02,
       rsi,
       crossover:  macd.bullishCross,
       crossunder: macd.bearishCross
@@ -357,14 +371,14 @@ class ProfessionalAnalysis {
   }
 
   volatiliteKontrol(highs, lows, closes) {
-    const atr    = this.hesaplaATR(highs, lows, closes, 14);
-    const fiyat  = closes[closes.length-1];
+    const atr     = this.hesaplaATR(highs, lows, closes, 14);
+    const fiyat   = closes[closes.length-1];
     const atrOran = atr / fiyat * 100;
     return { normalMum: atrOran < 5, atrOran };
   }
 
-  calculateMACD(closes)          { return this.hesaplaMACD(closes); }
-  calculateRSI(closes, period=14){ return this.hesaplaRSI(closes, period); }
+  calculateMACD(closes)           { return this.hesaplaMACD(closes); }
+  calculateRSI(closes, period=14) { return this.hesaplaRSI(closes, period); }
 
   // ── İNDİKATÖR FONKSİYONLARI ──────────────────────────────
 
@@ -457,4 +471,130 @@ class ProfessionalAnalysis {
       bullishCross: prevMacd<=prevSignal && macdLine>signalLine,
       bearishCross: prevMacd>=prevSignal && macdLine<signalLine,
       crossover:    prevMacd<=prevSignal && macdLine>signalLine,
-      crossunder:
+      crossunder:   prevMacd>=prevSignal && macdLine<signalLine,
+      bullDiv: c5.length>=5 && c5[4]<c5[0] && m5.length>=5 && m5[4]>m5[0],
+      bearDiv: c5.length>=5 && c5[4]>c5[0] && m5.length>=5 && m5[4]<m5[0]
+    };
+  }
+
+  hesaplaBollinger(closes, period=20, mult=2) {
+    const sl=closes.slice(-period);
+    const mean=sl.reduce((a,b)=>a+b,0)/period;
+    const std=Math.sqrt(sl.reduce((a,b)=>a+Math.pow(b-mean,2),0)/period);
+    const upper=mean+mult*std, lower=mean-mult*std;
+    const width=(upper-lower)/mean*100;
+    const pct=(closes[closes.length-1]-lower)/(upper-lower)*100;
+    const psl=closes.slice(-period-5,-5);
+    const pm=psl.reduce((a,b)=>a+b,0)/period;
+    const ps=Math.sqrt(psl.reduce((a,b)=>a+Math.pow(b-pm,2),0)/period);
+    const pw=((pm+2*ps)-(pm-2*ps))/pm*100;
+    return {upper,lower,mid:mean,width,percent:pct,expanding:width>pw*1.1,contracting:width<pw*0.9};
+  }
+
+  hesaplaOBV(closes, volumes) {
+    let obv=0;
+    const s=[0];
+    for (let i=1; i<closes.length; i++) {
+      if (closes[i]>closes[i-1]) obv+=volumes[i];
+      else if (closes[i]<closes[i-1]) obv-=volumes[i];
+      s.push(obv);
+    }
+    const o5=s.slice(-5).reduce((a,b)=>a+b,0)/5;
+    const o20=s.slice(-20).reduce((a,b)=>a+b,0)/20;
+    const o50=s.slice(-50).reduce((a,b)=>a+b,0)/50;
+    let trend='NOTR';
+    if (o5>o20&&o20>o50) trend='GUCLU_YUKARI';
+    else if (o5>o20)     trend='YUKARI';
+    else if (o5<o20&&o20<o50) trend='ASAGI';
+    const c5=closes.slice(-5), s5=s.slice(-5);
+    let divergence='YOK';
+    if (c5[4]<c5[0]&&s5[4]>s5[0]) divergence='BULL';
+    if (c5[4]>c5[0]&&s5[4]<s5[0]) divergence='BEAR';
+    return {trend,divergence,current:obv};
+  }
+
+  hesaplaCMF(highs, lows, closes, volumes, period=20) {
+    let mfv=0, vol=0;
+    for (let i=closes.length-period; i<closes.length; i++) {
+      const h=highs[i],l=lows[i],c=closes[i],v=volumes[i];
+      mfv+=(h===l?0:((c-l)-(h-c))/(h-l))*v;
+      vol+=v;
+    }
+    return vol===0?0:mfv/vol;
+  }
+
+  hesaplaVWAP(highs, lows, closes, volumes) {
+    let tpv=0, vol=0;
+    const p=Math.min(20,closes.length);
+    for (let i=closes.length-p; i<closes.length; i++) {
+      const tp=(highs[i]+lows[i]+closes[i])/3;
+      tpv+=tp*volumes[i]; vol+=volumes[i];
+    }
+    return vol===0?closes[closes.length-1]:tpv/vol;
+  }
+
+  hesaplaATR(highs, lows, closes, period=14) {
+    const tr=[];
+    for (let i=1; i<closes.length; i++)
+      tr.push(Math.max(highs[i]-lows[i],Math.abs(highs[i]-closes[i-1]),Math.abs(lows[i]-closes[i-1])));
+    return tr.slice(-period).reduce((a,b)=>a+b,0)/period;
+  }
+
+  hesaplaSR(highs, lows, lookback=50) {
+    return {direnc:Math.max(...highs.slice(-lookback)), destek:Math.min(...lows.slice(-lookback))};
+  }
+
+  hesaplaFibonacci(highs, lows, lookback=50) {
+    const mx=Math.max(...highs.slice(-lookback));
+    const mn=Math.min(...lows.slice(-lookback));
+    const d=mx-mn;
+    return {level236:mx-d*0.236,level382:mx-d*0.382,level500:mx-d*0.5,level618:mx-d*0.618,level786:mx-d*0.786};
+  }
+
+  rsiBullishDiv(closes) {
+    const n=closes.length;
+    if (n<10) return false;
+    return closes[n-1]<closes[n-6] && this.hesaplaRSI(closes,14)>this.hesaplaRSI(closes.slice(0,-5),14);
+  }
+
+  rsiBearishDiv(closes) {
+    const n=closes.length;
+    if (n<10) return false;
+    return closes[n-1]>closes[n-6] && this.hesaplaRSI(closes,14)<this.hesaplaRSI(closes.slice(0,-5),14);
+  }
+
+  analizMumYapilari(candles) {
+    const n=candles.length;
+    if (n<3) return {};
+    const c0=candles[n-1],c1=candles[n-2],c2=candles[n-3];
+    const o0=parseFloat(c0[1]),h0=parseFloat(c0[2]),l0=parseFloat(c0[3]),cl0=parseFloat(c0[4]);
+    const o1=parseFloat(c1[1]),h1=parseFloat(c1[2]),l1=parseFloat(c1[3]),cl1=parseFloat(c1[4]);
+    const o2=parseFloat(c2[1]),h2=parseFloat(c2[2]),l2=parseFloat(c2[3]),cl2=parseFloat(c2[4]);
+    const b0=Math.abs(cl0-o0),b1=Math.abs(cl1-o1),r0=h0-l0;
+    const u0=h0-Math.max(cl0,o0),a0=Math.min(cl0,o0)-l0;
+    const bull0=cl0>o0,bear0=cl0<o0,bull1=cl1>o1,bear1=cl1<o1;
+    return {
+      hammer:            a0>b0*2&&u0<b0*0.5&&bull0,
+      invertedHammer:    u0>b0*2&&a0<b0*0.5&&bull0,
+      shootingStar:      u0>b0*2&&a0<b0*0.5&&bear0,
+      hangingMan:        a0>b0*2&&u0<b0*0.5&&bear0,
+      doji:              b0<r0*0.1,
+      dojiDragonfly:     b0<r0*0.1&&a0>r0*0.6,
+      dojiGravestone:    b0<r0*0.1&&u0>r0*0.6,
+      marubozu:          b0>r0*0.9,
+      bullishEngulfing:  bear1&&bull0&&o0<=cl1&&cl0>=o1,
+      bearishEngulfing:  bull1&&bear0&&o0>=cl1&&cl0<=o1,
+      piercingLine:      bear1&&bull0&&o0<l1&&cl0>(o1+cl1)/2,
+      darkCloudCover:    bull1&&bear0&&o0>h1&&cl0<(o1+cl1)/2,
+      tweezerBottom:     Math.abs(l0-l1)/l0<0.001&&bull0&&bear1,
+      tweezerTop:        Math.abs(h0-h1)/h0<0.001&&bear0&&bull1,
+      morningStar:       bear1&&b1<Math.abs(cl2-o2)*0.5&&bull0&&cl0>(o2+cl2)/2,
+      eveningStar:       bull1&&b1<Math.abs(cl2-o2)*0.5&&bear0&&cl0<(o2+cl2)/2,
+      threeWhiteSoldiers:bull0&&bull1&&cl2>o2&&cl0>cl1&&cl1>cl2,
+      threeBlackCrows:   bear0&&bear1&&cl2<o2&&cl0<cl1&&cl1<cl2,
+    };
+  }
+}
+
+const parts = new ProfessionalAnalysis();
+module.exports = parts;
